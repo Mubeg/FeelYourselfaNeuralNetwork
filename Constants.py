@@ -1,0 +1,14 @@
+inf = int(10e5)
+world_size = 20
+mutate_prob = 0.3
+mutate_rate = 10e-3
+obstacle_prob = 0.3
+n_persons = 20 #even
+n_persons_10 = 100000
+LR = 10e-3
+hl1 = 20
+hl2 = 20
+out = 5
+game_time = 8*world_size
+input_l_s = game_time*5+5
+draw_user = True
