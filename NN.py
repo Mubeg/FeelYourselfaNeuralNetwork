@@ -9,56 +9,87 @@ def neural_network_model(input_size):
     tf.reset_default_graph()
     with graph.as_default():
                    config.init_training_mode()
+    hidden_l = []
     input_l = input_data(shape=[input_size, 1], name='input')
-
-    hidden_l1 = fully_connected(input_l, hl1, activation='relu')
-    hidden_l2 = fully_connected(hidden_l1, hl2, activation='relu')
-
-    out_l = fully_connected(hidden_l2, out, activation='softmax')
+    hidden_l.append(fully_connected(input_l, hl, activation='sigmoid'))
+    for i in range(hl_n - 1):
+                    hidden_l.append(fully_connected(hidden_l[-1], hl, activation='sigmoid'))
+    out_l = fully_connected(hidden_l[-1], out, activation='softmax')
     model = DNN(out_l)
+    return [model, hidden_l, out_l]
+def neural_network_model_educatable(input_size):
 
-    return [model, hidden_l1, hidden_l2, out_l]
+    graph = tf.Graph()
+    tf.reset_default_graph()
+    with graph.as_default():
+                   config.init_training_mode()
+    hidden_l = []
+    input_l = input_data(shape=[input_size, 1], name='input')
+    hidden_l.append(fully_connected(input_l, hl, activation='sigmoid'))
+    for i in range(hl_n - 1 + 2):
+                    hidden_l.append(fully_connected(hidden_l[-1], hl, activation='sigmoid'))
+    out_l = fully_connected(hidden_l[-1], out, activation='softmax')
+    network = regression(out_l, optimizer='adam', learning_rate=LR, loss='categorical_crossentropy', name='targets')
+    model = DNN(network)
+    return [model, hidden_l, out_l]
 
 def populate(population):
-    populate_main(sorted(population, key = lambda x: x["score"]))
+    populate_main(sorted(population, key = lambda x: x["score"], reverse = True))
 
-def pop_merge(new_population, population):
-    #length = sum(len(new_population[0][j][k]) for j in range(len(new_population[0])) for k in range(len(new_population[0][j])))
-    #prob_mutate = 1 - (1 - mutate_prob)**(1/length*100)
-    for i in range(n_persons//2):
-        for j in range(len(new_population[i])):
-            for k in range(len(new_population[i][j])):
-                for h in range(len(new_population[i][j][k])):
-                    if mutate_prob >= np.random.randint(0, 10e8 + 1)/10e8:
-                        new_population[i][j][k][h] += mutate_rate * np.random.randint(-10, 11)/10
-            population[i]["brain"][0].set_weights(population[i]["brain"][j + 1].W, np.array(new_population[i][j]))
-    for counter in range(n_persons//2):
-        a = np.random.randint(0, n_persons//2)
-        b = np.random.randint(0, n_persons//2)
+def pop_merge(new_population):
+    for i in range(n_persons):
+    #Mutation
+        for j in range(hl_n - 1):
+            weights = new_population[i]["brain"][0].get_weights(new_population[i]["brain"][1][j].W)
+            biases = new_population[i]["brain"][0].get_weights(new_population[i]["brain"][1][j].b)
+            w_shape = np.shape(weights)
+            b_shape = np.shape(biases)
+            new_population[i]["brain"][0].set_weights(new_population[i]["brain"][1][j].W, weights + np.fromiter(((-1)**np.random.randint(0, 2) * mutate_rate*(np.random.random() < mutate_prob) for _ in range(w_shape[0] * w_shape[1])), dtype = 'float').reshape(w_shape))
+            new_population[i]["brain"][0].set_weights(new_population[i]["brain"][1][j].b, biases + np.fromiter(((-1)**np.random.randint(0, 2) * mutate_rate*(np.random.random() < mutate_prob) for _ in range(b_shape[0])), dtype = 'float').reshape(b_shape))
+        weights = new_population[i]["brain"][0].get_weights(new_population[i]["brain"][2].W)
+        biases = new_population[i]["brain"][0].get_weights(new_population[i]["brain"][2].b)
+        w_shape = np.shape(weights)
+        b_shape = np.shape(biases)
+        new_population[i]["brain"][0].set_weights(new_population[i]["brain"][2].W, weights + np.fromiter(((-1)**np.random.randint(0, 2) * mutate_rate*(np.random.random() < mutate_prob) for _ in range(w_shape[0] * w_shape[1])), dtype = 'float').reshape(w_shape))
+        new_population[i]["brain"][0].set_weights(new_population[i]["brain"][2].b, biases + np.fromiter(((-1)**np.random.randint(0, 2) * mutate_rate*(np.random.random() < mutate_prob) for _ in range(b_shape[0])), dtype = 'float').reshape(b_shape))
+    #Crossing over
+    for counter in range(n_persons//2 - 1):
+        a = np.random.randint(0, n_persons//4)
+        b = np.random.randint(0, n_persons//4)
         while a == b:
             if n_persons == 1:
                 break
-            b = np.random.randint(0, n_persons//2)
-        parent_a = new_population[a][0] + new_population[a][1] + new_population[a][2]
-        parent_b = new_population[b][0] + new_population[b][1] + new_population[b][2]
-        c = np.random.randint(0, len(parent_a))
-        parent_a[c:] = parent_b[c:]
-        new_pop = [parent_a[0:input_l_s:1], parent_a[input_l_s:input_l_s+hl1:1], parent_a[input_l_s+hl1:input_l_s+hl1+hl2:1]]
-        population[n_persons//2 + counter]["brain"][0].set_weights(population[n_persons//2 + counter]["brain"][1].W, np.array(new_pop[0]))
-        population[n_persons//2 + counter]["brain"][0].set_weights(population[n_persons//2 + counter]["brain"][2].W, np.array(new_pop[1]))
-        population[n_persons//2 + counter]["brain"][0].set_weights(population[n_persons//2 + counter]["brain"][3].W, np.array(new_pop[2]))
+            b = np.random.randint(0, n_persons//4)
+        #Weights
+        parent_a = [new_population[a]["brain"][0].get_weights(new_population[a]["brain"][1][j].W) for j in range(hl_n - 1)] + [new_population[a]["brain"][0].get_weights(new_population[a]["brain"][2].W)]
+        parent_b = [new_population[b]["brain"][0].get_weights(new_population[b]["brain"][1][j].W) for j in range(hl_n - 1)] + [new_population[b]["brain"][0].get_weights(new_population[b]["brain"][2].W)]
+        for j in range(len(parent_a)):
+            c = np.random.randint(0, len(parent_a))
+            parent_a[j][c:] = parent_b[j][c:]
+        for j in range(hl_n - 1):
+            new_population[i]["brain"][0].set_weights(new_population[i]["brain"][1][j].W, parent_a[j])
+        new_population[i]["brain"][0].set_weights(new_population[i]["brain"][2].W, parent_a[-1])
+        #biases
+        parent_a = [new_population[a]["brain"][0].get_weights(new_population[a]["brain"][1][j].b) for j in range(hl_n - 1)] + [new_population[a]["brain"][0].get_weights(new_population[a]["brain"][2].b)]
+        parent_b = [new_population[b]["brain"][0].get_weights(new_population[b]["brain"][1][j].b) for j in range(hl_n - 1)] + [new_population[b]["brain"][0].get_weights(new_population[b]["brain"][2].b)]
+        for j in range(len(parent_a)):
+            c = np.random.randint(0, len(parent_a))
+            parent_a[j][c:] = parent_b[j][c:]
+        for j in range(hl_n - 1):
+            new_population[i]["brain"][0].set_weights(new_population[i]["brain"][1][j].b, parent_a[j])
+        new_population[i]["brain"][0].set_weights(new_population[i]["brain"][2].b, parent_a[-1])
 
 def populate_main(population):
     new_population = []
-    population_buf = np.zeros(20)
+    population_buf = np.zeros(n_persons)
     while len(new_population) < n_persons//2:
-        for i in range(n_persons - 1, -1, -1):
+        for i in range(0, n_persons):
             if not population_buf[i]:
-                if 1/(n_persons - i) >= np.random.randint(0, n_persons_10 + 1)/n_persons_10:
+                if 1/(i + 1) >= np.random.randint(0, inf + 1)/inf:
                     if len(new_population) < n_persons//2:
                         new_population.append(population[i])
                         population_buf[i] = 1
     for i in range(len(population)):
         if not population_buf[i]:
             new_population.append(population[i])
-    pop_merge([[x["brain"][0].get_weights(x["brain"][i].W).tolist() for i in range(1, len(new_population[0]["brain"]))] for x in new_population], new_population)
+    pop_merge(new_population)
